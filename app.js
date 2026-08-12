@@ -97,7 +97,7 @@ function d2g(jdn) {
   return { gy: gy, gm: gm, gd: gd };
 }
 function toJalali(date) {
-  var d = date ? new Date(date) : new Date();
+  var d = date ? (typeof date === 'string' ? parseLocalDateStr(date) : new Date(date)) : new Date();
   var jdn = g2d(d.getFullYear(), d.getMonth() + 1, d.getDate());
   var gy = d2g(jdn).gy, jy = gy - 621;
   var r = jalCal(jy, false), jdn1f = g2d(gy, 3, r.march), k = jdn - jdn1f, jm, jd;
@@ -139,21 +139,42 @@ function faDate(date) {
 }
 function faDateLong(date) { var j = toJalali(date); return DOW[j.dow] + '، ' + faDate(date); }
 
+/** تبدیل Date به ISO string محلی (بدون تغییر timezone) */
+function toLocalISOString(date) {
+  var year = date.getFullYear();
+  var month = ('0' + (date.getMonth() + 1)).slice(-2);
+  var day = ('0' + date.getDate()).slice(-2);
+  return year + '-' + month + '-' + day;
+}
+
 /** تاریخ‌گیر عمومی — جایگزین همهٔ open*DatePicker های تکراری */
+var _datePickerValues = {};
+
 function openDatePicker(inputId, afterPick) {
   var input = typeof inputId === 'string' ? document.getElementById(inputId) : inputId;
   if (!input) input = document.querySelector('[data-iso]');
-  var currentDate = input && input.dataset.iso ? new Date(input.dataset.iso) : new Date();
+  var currentDate = input && input.dataset.iso ? parseLocalDateStr(input.dataset.iso) : new Date();
+  var reopenCallback = _reopenSheetCallback;
+  var inputIdStr = typeof inputId === 'string' ? inputId : (input ? input.id : '');
   jalaliDatePicker(currentDate, function(selectedDate) {
+    var isoStr = toLocalDateStr(selectedDate);
+    // ذخیره مقدار برای بازیابی بعدی
+    if (inputIdStr) {
+      _datePickerValues[inputIdStr] = isoStr;
+    }
     if (input) {
       input.value = faDate(selectedDate);
-      input.dataset.iso = selectedDate.toISOString().split('T')[0];
+      input.dataset.iso = isoStr;
     }
     if (afterPick) afterPick(selectedDate, input);
+    // بازیابی sheet قبلی
+    if (reopenCallback) {
+      reopenCallback();
+    }
   });
 }
 /* سازگاری عقبی: wrapper های کوتاه */
-function openInvoiceDatePicker() { openDatePicker(null, function(d) { invoiceDate = d.toISOString().split('T')[0]; }); }
+function openInvoiceDatePicker() { openDatePicker(null, function(d) { invoiceDate = toLocalDateStr(d); }); }
 function openTxDatePicker()     { openDatePicker('txDate'); }
 function openTrsDatePicker()    { openDatePicker('trsDate'); }
 function openPurDatePicker()    { openDatePicker('purDate'); }
@@ -170,9 +191,10 @@ function jalaliDatePicker(currentDate, callback) {
   var touchEndX = 0;
   
   function render() {
-    var jdn1 = g2d(toGregorian(viewYear, viewMonth, 1).getFullYear(), toGregorian(viewYear, viewMonth, 1).getMonth() + 1, 1);
-    var g1 = d2g(jdn1);
-    var firstDayDow = new Date(g1.gy, g1.gm - 1, g1.gd).getDay();
+    // محاسبه روز هفته اول ماه جلالی
+    var firstDayGregorian = toGregorian(viewYear, viewMonth, 1);
+    var firstDayDow = firstDayGregorian.getDay(); // 0=یکشنبه، 1=دوشنبه، ...، 6=شنبه
+    
     var monthLen = jalaliMonthLength(viewYear, viewMonth);
     var monthNameStr = monthName(viewMonth);
     
@@ -187,9 +209,9 @@ function jalaliDatePicker(currentDate, callback) {
     
     // Navigator - انتخاب ماه و سال
     body += '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;padding:0 4px">';
-    body += '<button class="icon-btn" data-act="prevMonth" aria-label="ماه قبل" style="width:44px;height:44px;border-radius:10px"><svg viewBox="0 0 24 24" width="24" height="24"><path fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" d="m15 18-6-6 6-6"/></svg></button>';
-    body += '<button data-act="openMonthYearPicker" style="text-align:center;font-size:20px;font-weight:800;background:transparent;border:none;padding:10px 20px;border-radius:10px;cursor:pointer;letter-spacing:1px">' + toFa(viewMonth) + ' / ' + toFa(viewYear) + '</button>';
-    body += '<button class="icon-btn" data-act="nextMonth" aria-label="ماه بعد" style="width:44px;height:44px;border-radius:10px"><svg viewBox="0 0 24 24" width="24" height="24"><path fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" d="m9 18 6-6-6-6"/></svg></button>';
+    body += '<button class="icon-btn" data-dp="prevMonth" aria-label="ماه قبل" style="width:44px;height:44px;border-radius:10px"><svg viewBox="0 0 24 24" width="24" height="24"><path fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" d="m15 18-6-6 6-6"/></svg></button>';
+    body += '<button data-dp="openMonthYearPicker" style="text-align:center;font-size:20px;font-weight:800;background:transparent;border:none;padding:10px 20px;border-radius:10px;cursor:pointer;letter-spacing:1px">' + toFa(viewMonth) + ' / ' + toFa(viewYear) + '</button>';
+    body += '<button class="icon-btn" data-dp="nextMonth" aria-label="ماه بعد" style="width:44px;height:44px;border-radius:10px"><svg viewBox="0 0 24 24" width="24" height="24"><path fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" d="m9 18 6-6-6-6"/></svg></button>';
     body += '</div>';
     
     // Day names
@@ -203,7 +225,11 @@ function jalaliDatePicker(currentDate, callback) {
     body += '<div class="date-picker-days" id="datePickerDays" style="display:grid;grid-template-columns:repeat(7,1fr);gap:8px;padding:0 2px">';
     
     // Empty cells before first day
-    for (var i = 0; i < (6 - firstDayDow) % 7; i++) {
+    // تبدیل day of week از JavaScript (0=یکشنبه) به تقویم ما (0=شنبه)
+    // فرمول: (firstDayDow + 1) % 7
+    // مثال: یکشنبه (0) → 1 empty cell، شنبه (6) → 0 empty cells
+    var emptyCells = (firstDayDow + 1) % 7;
+    for (var i = 0; i < emptyCells; i++) {
       body += '<div></div>';
     }
     
@@ -224,9 +250,60 @@ function jalaliDatePicker(currentDate, callback) {
     sheet({
       title: 'انتخاب تاریخ',
       body: body,
-      foot: '<button class="btn outline" data-act="closeSheet" style="flex:1">لغو</button><button class="btn" data-act="confirmDate" style="flex:1">تأیید</button>',
-      onOpen: function() {
-        // اضافه کردن swipe events
+      foot: '<button class="btn outline" data-act="closeSheet" style="flex:1">لغو</button><button class="btn" data-dp="confirmDate" style="flex:1">تأیید</button>',
+      onOpen: function(wrap) {
+        // Event delegation روی sheet body
+        var sheetBody = wrap.querySelector('.sheet-body');
+        var sheetFoot = wrap.querySelector('.sheet-foot');
+        
+        function handleClick(e) {
+          if (e.target.closest('[data-dp="prevMonth"]')) {
+            e.preventDefault();
+            e.stopPropagation();
+            var daysContainer = document.getElementById('datePickerDays');
+            if (daysContainer) daysContainer.classList.add('slide-right');
+            setTimeout(function() {
+              viewMonth--;
+              if (viewMonth < 1) { viewMonth = 12; viewYear--; }
+              render();
+            }, 150);
+          } else if (e.target.closest('[data-dp="nextMonth"]')) {
+            e.preventDefault();
+            e.stopPropagation();
+            var daysContainer = document.getElementById('datePickerDays');
+            if (daysContainer) daysContainer.classList.add('slide-left');
+            setTimeout(function() {
+              viewMonth++;
+              if (viewMonth > 12) { viewMonth = 1; viewYear++; }
+              render();
+            }, 150);
+          } else if (e.target.closest('[data-dp="openMonthYearPicker"]')) {
+            e.preventDefault();
+            e.stopPropagation();
+            openMonthYearPicker(viewYear, viewMonth, function(year, month) {
+              viewYear = year;
+              viewMonth = month;
+              render();
+            });
+          } else if (e.target.closest('[data-day]')) {
+            e.preventDefault();
+            e.stopPropagation();
+            var day = parseInt(e.target.closest('[data-day]').dataset.day);
+            selected = { jy: viewYear, jm: viewMonth, jd: day };
+            render();
+          } else if (e.target.closest('[data-dp="confirmDate"]')) {
+            e.preventDefault();
+            e.stopPropagation();
+            var gDate = toGregorian(selected.jy, selected.jm, selected.jd);
+            closeSheet();
+            if (callback) callback(gDate);
+          }
+        }
+        
+        if (sheetBody) sheetBody.addEventListener('click', handleClick);
+        if (sheetFoot) sheetFoot.addEventListener('click', handleClick);
+        
+        // Swipe events
         var daysContainer = document.getElementById('datePickerDays');
         if (daysContainer) {
           daysContainer.addEventListener('touchstart', function(e) {
@@ -248,7 +325,6 @@ function jalaliDatePicker(currentDate, callback) {
     if (Math.abs(diff) > threshold) {
       var daysContainer = document.getElementById('datePickerDays');
       if (diff > 0) {
-        // Swipe right - ماه قبل
         if (daysContainer) daysContainer.classList.add('slide-right');
         setTimeout(function() {
           viewMonth--;
@@ -256,7 +332,6 @@ function jalaliDatePicker(currentDate, callback) {
           render();
         }, 150);
       } else {
-        // Swipe left - ماه بعد
         if (daysContainer) daysContainer.classList.add('slide-left');
         setTimeout(function() {
           viewMonth++;
@@ -268,43 +343,6 @@ function jalaliDatePicker(currentDate, callback) {
   }
   
   render();
-  
-  // Event handlers
-  var handler = function(e) {
-    if (e.target.closest('[data-act="prevMonth"]')) {
-      var daysContainer = document.getElementById('datePickerDays');
-      if (daysContainer) daysContainer.classList.add('slide-right');
-      setTimeout(function() {
-        viewMonth--;
-        if (viewMonth < 1) { viewMonth = 12; viewYear--; }
-        render();
-      }, 150);
-    } else if (e.target.closest('[data-act="nextMonth"]')) {
-      var daysContainer = document.getElementById('datePickerDays');
-      if (daysContainer) daysContainer.classList.add('slide-left');
-      setTimeout(function() {
-        viewMonth++;
-        if (viewMonth > 12) { viewMonth = 1; viewYear++; }
-        render();
-      }, 150);
-    } else if (e.target.closest('[data-act="openMonthYearPicker"]')) {
-      openMonthYearPicker(viewYear, viewMonth, function(year, month) {
-        viewYear = year;
-        viewMonth = month;
-        render();
-      });
-    } else if (e.target.closest('[data-day]')) {
-      var day = parseInt(e.target.closest('[data-day]').dataset.day);
-      selected = { jy: viewYear, jm: viewMonth, jd: day };
-      render();
-    } else if (e.target.closest('[data-act="confirmDate"]')) {
-      var gDate = toGregorian(selected.jy, selected.jm, selected.jd);
-      closeSheet();
-      if (callback) callback(gDate);
-    }
-  };
-  document.addEventListener('click', handler);
-  registerDatePickerHandler(handler);
 }
 
 function openMonthYearPicker(currentYear, currentMonth, callback) {
@@ -344,34 +382,44 @@ function openMonthYearPicker(currentYear, currentMonth, callback) {
   sheet({
     title: 'انتخاب ماه و سال',
     body: body,
-    foot: '<button class="btn outline" data-act="closeSheet" style="flex:1">لغو</button><button class="btn" data-act="confirmMonthYear" style="flex:1">تأیید</button>'
-  });
-  
-  // Event handlers
-  var handler = function(e) {
-    if (e.target.closest('[data-year]')) {
-      selectedYear = parseInt(e.target.closest('[data-year]').dataset.year);
-      document.querySelectorAll('[data-year]').forEach(function(btn) {
-        var y = parseInt(btn.dataset.year);
-        var isSelected = (y === selectedYear);
-        btn.style.background = isSelected ? 'var(--primary)' : 'var(--surface2)';
-        btn.style.color = isSelected ? 'var(--primary-fg)' : 'var(--ink)';
-      });
-    } else if (e.target.closest('[data-month]')) {
-      selectedMonth = parseInt(e.target.closest('[data-month]').dataset.month);
-      document.querySelectorAll('[data-month]').forEach(function(btn) {
-        var m = parseInt(btn.dataset.month);
-        var isSelected = (m === selectedMonth);
-        btn.style.background = isSelected ? 'var(--primary)' : 'var(--surface2)';
-        btn.style.color = isSelected ? 'var(--primary-fg)' : 'var(--ink)';
-      });
-    } else if (e.target.closest('[data-act="confirmMonthYear"]')) {
-      closeSheet();
-      if (callback) callback(selectedYear, selectedMonth);
+    foot: '<button class="btn outline" data-act="closeSheet" style="flex:1">لغو</button><button class="btn" data-dp="confirmMonthYear" style="flex:1">تأیید</button>',
+    onOpen: function(wrap) {
+      var sheetBody = wrap.querySelector('.sheet-body');
+      var sheetFoot = wrap.querySelector('.sheet-foot');
+      
+      function handleClick(e) {
+        if (e.target.closest('[data-year]')) {
+          e.preventDefault();
+          e.stopPropagation();
+          selectedYear = parseInt(e.target.closest('[data-year]').dataset.year);
+          document.querySelectorAll('[data-year]').forEach(function(btn) {
+            var y = parseInt(btn.dataset.year);
+            var isSelected = (y === selectedYear);
+            btn.style.background = isSelected ? 'var(--primary)' : 'var(--surface2)';
+            btn.style.color = isSelected ? 'var(--primary-fg)' : 'var(--ink)';
+          });
+        } else if (e.target.closest('[data-month]')) {
+          e.preventDefault();
+          e.stopPropagation();
+          selectedMonth = parseInt(e.target.closest('[data-month]').dataset.month);
+          document.querySelectorAll('[data-month]').forEach(function(btn) {
+            var m = parseInt(btn.dataset.month);
+            var isSelected = (m === selectedMonth);
+            btn.style.background = isSelected ? 'var(--primary)' : 'var(--surface2)';
+            btn.style.color = isSelected ? 'var(--primary-fg)' : 'var(--ink)';
+          });
+        } else if (e.target.closest('[data-dp="confirmMonthYear"]')) {
+          e.preventDefault();
+          e.stopPropagation();
+          closeSheet();
+          if (callback) callback(selectedYear, selectedMonth);
+        }
+      }
+      
+      if (sheetBody) sheetBody.addEventListener('click', handleClick);
+      if (sheetFoot) sheetFoot.addEventListener('click', handleClick);
     }
-  };
-  document.addEventListener('click', handler);
-  registerDatePickerHandler(handler);
+  });
 }
 function faTime(date) {
   var d = new Date(date); var h = d.getHours(), mi = d.getMinutes();
@@ -381,13 +429,49 @@ function dayKey(date) {
   var j = toJalali(date);
   return j.jy + '-' + (j.jm < 10 ? '0' : '') + j.jm + '-' + (j.jd < 10 ? '0' : '') + j.jd;
 }
+/**
+ * بررسی اینکه تاریخ در بازه مشخص است یا نه
+ * 
+ * @param {string} iso - تاریخ به فرمت YYYY-MM-DD یا ISO
+ * @param {string} range - بازه: 'today', 'week', 'month', 'all'
+ * @returns {boolean}
+ * 
+ * تعاریف:
+ * - today: امروز محلی
+ * - week: هفته جاری شمسی (شنبه تا جمعه)
+ * - month: ماه جاری شمسی
+ */
 function inRange(iso, range) {
   if (range === 'all') return true;
-  var now = new Date(), d = new Date(iso);
-  var start = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  if (range === 'today') return d >= start;
-  if (range === 'week') return d >= new Date(start.getTime() - 6 * 864e5);
-  if (range === 'month') return d >= new Date(start.getTime() - 29 * 864e5);
+  
+  var now = new Date();
+  var d = parseLocalDateStr(iso);
+  var today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  
+  if (range === 'today') {
+    return d >= today;
+  }
+  
+  if (range === 'week') {
+    // هفته جاری شمسی (شنبه تا جمعه)
+    var jalaliToday = toJalali(now);
+    var dayOfWeek = jalaliToday.dow; // 0=شنبه، 1=یکشنبه، ...، 6=جمعه
+    
+    // پیدا کردن شنبه این هفته
+    var saturday = new Date(today);
+    saturday.setDate(saturday.getDate() - dayOfWeek);
+    
+    return d >= saturday;
+  }
+  
+  if (range === 'month') {
+    // ماه جاری شمسی
+    var jalaliToday = toJalali(now);
+    var firstDayOfMonth = toGregorian(jalaliToday.jy, jalaliToday.jm, 1);
+    
+    return d >= firstDayOfMonth;
+  }
+  
   return true;
 }
 /* ══════════════ نمودارهای SVG ══════════════ */
@@ -497,6 +581,26 @@ function todayInput() {
   var d = new Date();
   return d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2) + '-' + ('0' + d.getDate()).slice(-2);
 }
+
+/**
+ * تبدیل Date به YYYY-MM-DD محلی (بدون تبدیل به UTC)
+ * استفاده برای ذخیره تاریخ‌های "روز تقویمی"
+ */
+function toLocalDateStr(date) {
+  var d = date || new Date();
+  return d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2) + '-' + ('0' + d.getDate()).slice(-2);
+}
+
+/**
+ * تبدیل YYYY-MM-DD (محلی یا UTC) به Date محلی
+ * اگر ISO کامل باشد (با T و Z)، به روز محلی درست تفسیر می‌کند
+ */
+function parseLocalDateStr(str) {
+  if (!str) return new Date();
+  var parts = String(str).split('T')[0].split('-');
+  return new Date(+parts[0], (+parts[1] || 1) - 1, +parts[2] || 1);
+}
+
 function todayInputSafe() { return todayInput(); }
 
 function parseInputDate(v) {
@@ -603,33 +707,43 @@ function accountBalance(id) {
   if (!acc) return 0;
   var b = m2(acc.opening || 0);
   
+  // شناسه مشتری/فراهم‌کننده (oldId یا id)
+  var entityId = acc.oldId || acc.id;
+  
   // محاسبه از فاکتورهای فروش (اگر مشتری باشد)
   if (acc.type === 'customer') {
-    // فروش نسیه (due) → افزایش بدهی مشتری
+    // فروش → افزایش بدهی مشتری
     DB.sales.forEach(function(s) { 
-      if (s.customerId === acc.oldId) b += m2(s.due); 
+      if (s.customerId === entityId) b += m2(s.total); 
     });
     // پرداخت مشتری → کاهش بدهی
     DB.payments.forEach(function(p) { 
-      if (p.customerId === acc.oldId) b -= m2(p.amount); 
+      if (p.customerId === entityId) b -= m2(p.amount); 
     });
   }
   
   // محاسبه از فاکتورهای خرید (اگر فراهم‌کننده باشد)
   if (acc.type === 'supplier') {
-    // خرید نسیه (due) → افزایش بدهی ما به فراهم‌کننده
+    // خرید → افزایش بدهی ما به فراهم‌کننده
     DB.purchases.forEach(function(p) { 
-      if (p.supplierId === acc.oldId) b += m2(p.due); 
+      if (p.supplierId === entityId) b += m2(p.total); 
     });
     // پرداخت به فراهم‌کننده → کاهش بدهی
     DB.supplierPayments.forEach(function(p) { 
-      if (p.supplierId === acc.oldId) b -= m2(p.amount); 
+      if (p.supplierId === entityId) b -= m2(p.amount); 
     });
   }
   
   // محاسبه از accountAdjustments (برای همه انواع حساب)
+  // چک کن هم accountId و هم customerId/supplierId (برای backward compatibility)
   DB.accountAdjustments.forEach(function(a) { 
-    if (a.accountId === id) b += m2(a.delta); 
+    if (a.accountId === id) {
+      b += m2(a.delta);
+    } else if (acc.type === 'customer' && a.kind === 'cust' && a.customerId === entityId) {
+      b += m2(a.delta);
+    } else if (acc.type === 'supplier' && a.kind === 'supp' && a.supplierId === entityId) {
+      b += m2(a.delta);
+    }
   });
   
   return m2(b);
@@ -691,54 +805,94 @@ function load() {
 /* ══════════════ مهاجرت به سیستم چندنوعی ══════════════ */
 function migrateToAccounts() {
   if (!DB.accounts) DB.accounts = [];
-  if (DB.accounts.length > 0) return; // قبلاً مهاجرت شده
+  
+  var migrated = false;
   
   // مهاجرت customers
   DB.customers.forEach(function(c) {
-    DB.accounts.push({
-      id: 'acc_' + c.id,
-      oldId: c.id,
-      oldType: 'customer',
-      type: 'customer',
-      name: c.name,
-      phone: c.phone || '',
-      address: c.address || '',
-      note: c.note || '',
-      opening: c.opening || 0,
-      pinned: c.pinned || false,
-      disabled: c.disabled || false,
-      createdAt: c.createdAt || new Date().toISOString()
+    // چک کن آیا account مربوطه وجود دارد یا نه
+    var existingAcc = DB.accounts.find(function(a) { 
+      return (a.oldId === c.id || a.id === c.id) && a.type === 'customer'; 
     });
+    
+    if (!existingAcc) {
+      DB.accounts.push({
+        id: 'acc_' + c.id,
+        oldId: c.id,
+        oldType: 'customer',
+        type: 'customer',
+        name: c.name,
+        phone: c.phone || '',
+        address: c.address || '',
+        note: c.note || '',
+        opening: c.opening || 0,
+        pinned: c.pinned || false,
+        disabled: c.disabled || false,
+        createdAt: c.createdAt || new Date().toISOString()
+      });
+      migrated = true;
+    } else {
+      // همگام‌سازی account با customer
+      existingAcc.name = c.name;
+      existingAcc.phone = c.phone || '';
+      existingAcc.address = c.address || '';
+      existingAcc.note = c.note || '';
+      existingAcc.opening = c.opening || 0;
+      existingAcc.pinned = c.pinned || false;
+      existingAcc.disabled = c.disabled || false;
+      migrated = true;
+    }
   });
   
   // مهاجرت suppliers
   DB.suppliers.forEach(function(s) {
-    DB.accounts.push({
-      id: 'acc_' + s.id,
-      oldId: s.id,
-      oldType: 'supplier',
-      type: 'supplier',
-      name: s.name,
-      phone: s.phone || '',
-      address: s.address || '',
-      note: s.note || '',
-      opening: s.opening || 0,
-      pinned: s.pinned || false,
-      disabled: s.disabled || false,
-      createdAt: s.createdAt || new Date().toISOString()
+    var existingAcc = DB.accounts.find(function(a) { 
+      return (a.oldId === s.id || a.id === s.id) && a.type === 'supplier'; 
     });
-  });
-  
-  // مهاجرت accountAdjustments
-  DB.accountAdjustments.forEach(function(a) {
-    if (a.kind === 'cust' && a.customerId) {
-      a.accountId = 'acc_' + a.customerId;
-    } else if (a.kind === 'supp' && a.supplierId) {
-      a.accountId = 'acc_' + a.supplierId;
+    
+    if (!existingAcc) {
+      DB.accounts.push({
+        id: 'acc_' + s.id,
+        oldId: s.id,
+        oldType: 'supplier',
+        type: 'supplier',
+        name: s.name,
+        phone: s.phone || '',
+        address: s.address || '',
+        note: s.note || '',
+        opening: s.opening || 0,
+        pinned: s.pinned || false,
+        disabled: s.disabled || false,
+        createdAt: s.createdAt || new Date().toISOString()
+      });
+      migrated = true;
+    } else {
+      // همگام‌سازی account با supplier
+      existingAcc.name = s.name;
+      existingAcc.phone = s.phone || '';
+      existingAcc.address = s.address || '';
+      existingAcc.note = s.note || '';
+      existingAcc.opening = s.opening || 0;
+      existingAcc.pinned = s.pinned || false;
+      existingAcc.disabled = s.disabled || false;
+      migrated = true;
     }
   });
   
-  if (DB.accounts.length > 0) {
+  // مهاجرت accountAdjustments (تنظیم accountId)
+  DB.accountAdjustments.forEach(function(a) {
+    if (!a.accountId) {
+      if (a.kind === 'cust' && a.customerId) {
+        a.accountId = 'acc_' + a.customerId;
+        migrated = true;
+      } else if (a.kind === 'supp' && a.supplierId) {
+        a.accountId = 'acc_' + a.supplierId;
+        migrated = true;
+      }
+    }
+  });
+  
+  if (migrated) {
     save();
   }
 }
@@ -770,6 +924,21 @@ function autoBackup() {
   } catch (e) { }
 }
 var PENDING_PIN = null;
+/**
+ * درخواست ورود PIN قبل از اجرای عملیات حساس
+ * 
+ * @param {function} onOk - callback که بعد از تأیید PIN اجرا می‌شود
+ * 
+ * رفتار:
+ * - اگر DB.settings.pin خالی باشد → onOk اجرا می‌شود (بدون قفل)
+ * - اگر DB.settings.pin تنظیم شده باشد → sheet ورود رمز نمایش داده می‌شود
+ * 
+ * ⚠️ محدودیت امنیتی:
+ * PIN به‌صورت plaintext در localStorage ذخیره می‌شود.
+ * این یک محافظت ساده در برابر دسترسی تصادفی است، نه امنیت واقعی.
+ * برای امنیت واقعی، باید از hash (مثل SHA-256) استفاده شود،
+ * اما در اپ آفلاین موبایل، امنیت مطلق وجود ندارد.
+ */
 function requirePin(onOk) {
   if (!DB.settings.pin) { onOk(); return; }
   sheet({
@@ -782,20 +951,43 @@ function requirePin(onOk) {
 
 /* ══════════════ ۴) محاسبات ══════════════ */
 function customerBalance(id) {
-  var c = customerById(id);
-  var b = c ? m2(c.opening || 0) : 0;
-  DB.sales.forEach(function (s) { if (s.customerId === id) b += m2(s.due); });
-  DB.payments.forEach(function (p) { if (p.customerId === id) b -= m2(p.amount); });
-  DB.accountAdjustments.forEach(function (a) { if (a.kind === 'cust' && a.customerId === id) b += m2(a.delta); });
-  return m2(b);
+  // پیدا کردن account مربوطه
+  var acc = DB.accounts.find(function(a) { 
+    return (a.oldId === id || a.id === id) && a.type === 'customer'; 
+  });
+  
+  if (acc) {
+    // استفاده از accountBalance (منبع حقیقت)
+    return accountBalance(acc.id);
+  } else {
+    // fallback برای backward compatibility
+    var c = customerById(id);
+    var b = c ? m2(c.opening || 0) : 0;
+    DB.sales.forEach(function (s) { if (s.customerId === id) b += m2(s.total); });
+    DB.payments.forEach(function (p) { if (p.customerId === id) b -= m2(p.amount); });
+    DB.accountAdjustments.forEach(function (a) { if (a.kind === 'cust' && a.customerId === id) b += m2(a.delta); });
+    return m2(b);
+  }
 }
+
 function supplierBalance(id) {
-  var c = supplierById(id);
-  var b = c ? m2(c.opening || 0) : 0;
-  DB.purchases.forEach(function (s) { if (s.supplierId === id) b += m2(s.due); });
-  DB.supplierPayments.forEach(function (p) { if (p.supplierId === id) b -= m2(p.amount); });
-  DB.accountAdjustments.forEach(function (a) { if (a.kind === 'supp' && a.supplierId === id) b += m2(a.delta); });
-  return m2(b);
+  // پیدا کردن account مربوطه
+  var acc = DB.accounts.find(function(a) { 
+    return (a.oldId === id || a.id === id) && a.type === 'supplier'; 
+  });
+  
+  if (acc) {
+    // استفاده از accountBalance (منبع حقیقت)
+    return accountBalance(acc.id);
+  } else {
+    // fallback برای backward compatibility
+    var c = supplierById(id);
+    var b = c ? m2(c.opening || 0) : 0;
+    DB.purchases.forEach(function (s) { if (s.supplierId === id) b += m2(s.total); });
+    DB.supplierPayments.forEach(function (p) { if (p.supplierId === id) b -= m2(p.amount); });
+    DB.accountAdjustments.forEach(function (a) { if (a.kind === 'supp' && a.supplierId === id) b += m2(a.delta); });
+    return m2(b);
+  }
 }
 function cashBox() {
   var v = 0;
@@ -874,8 +1066,41 @@ function topProducts(range) {
   return Object.keys(map).map(function (k) { return map[k]; })
     .sort(function (a, b) { return b.total - a.total; });
 }
-function totalDebt() { var t = 0; DB.customers.forEach(function (c) { var b = customerBalance(c.id); if (b > 0) t += b; }); return m2(t); }
-function totalPayable() { var t = 0; DB.suppliers.forEach(function (c) { var b = supplierBalance(c.id); if (b > 0) t += b; }); return m2(t); }
+/**
+ * جمع بدهی مشتریان (از منبع داده واحد: DB.accounts)
+ * 
+ * @returns {number} - جمع بدهی همه مشتریان فعال
+ * 
+ * قانون: حساب‌های disabled خارج جمع هستند
+ */
+function totalDebt() { 
+  var t = 0; 
+  DB.accounts.forEach(function (acc) { 
+    if (acc.type === 'customer' && !acc.disabled) {
+      var b = accountBalance(acc.id); 
+      if (b > 0) t += b; 
+    }
+  }); 
+  return m2(t); 
+}
+
+/**
+ * جمع بدهی به تأمین‌کنندگان (از منبع داده واحد: DB.accounts)
+ * 
+ * @returns {number} - جمع بدهی به همه تأمین‌کنندگان فعال
+ * 
+ * قانون: حساب‌های disabled خارج جمع هستند
+ */
+function totalPayable() { 
+  var t = 0; 
+  DB.accounts.forEach(function (acc) { 
+    if (acc.type === 'supplier' && !acc.disabled) {
+      var b = accountBalance(acc.id); 
+      if (b > 0) t += b; 
+    }
+  }); 
+  return m2(t); 
+}
 function productById(id) { return DB.products.find(function (p) { return p.id === id; }); }
 function customerById(id) { return DB.customers.find(function (c) { return c.id === id; }); }
 function supplierById(id) { return DB.suppliers.find(function (c) { return c.id === id; }); }
@@ -885,8 +1110,68 @@ function stockState(p) {
   if (min > 0 && num(p.stock) <= min) return 'low';
   return 'ok';
 }
+/**
+ * چک کردن موجودی قبل از تغییر
+ * 
+ * @param {string} pid - شناسه کالا
+ * @param {number} qtyChange - تغییر تعداد (مثبت = افزایش، منفی = کاهش)
+ * @param {string} operationName - نام عملیات برای پیام خطا
+ * @returns {boolean} - true اگر مجاز، false اگر غیرمجاز
+ */
+function checkStock(pid, qtyChange, operationName) {
+  var p = productById(pid);
+  
+  // کالا وجود ندارد
+  if (!p) {
+    toast('کالا یافت نشد. عملیات ' + (operationName || '') + ' لغو شد.', 'bad');
+    return false;
+  }
+  
+  var currentStock = num(p.stock);
+  var newStock = m2(currentStock + qtyChange);
+  
+  // اگر کاهش موجودی است و موجودی کافی نیست
+  if (qtyChange < 0 && newStock < 0) {
+    var productName = p.name || 'کالای ناشناس';
+    var shortage = Math.abs(newStock);
+    toast('موجودی ' + productName + ' کافی نیست. کمبود: ' + toFa(group(shortage)) + ' ' + (p.unit || 'عدد'), 'bad');
+    return false;
+  }
+  
+  return true;
+}
+
+/**
+ * اعمال تغییر موجودی با چک کردن
+ * 
+ * @param {string} pid - شناسه کالا
+ * @param {number} qtyChange - تغییر تعداد (مثبت = افزایش، منفی = کاهش)
+ * @param {string} moveType - نوع حرکت (sale, purchase, return, adjust)
+ * @param {string} moveNote - توضیح حرکت
+ * @param {string} operationName - نام عملیات برای پیام خطا
+ * @returns {boolean} - true اگر موفق، false اگر ناموفق
+ */
 function addStockMove(type, pid, qty, note, d) {
-  DB.stockMoves.push({ id: uid('mv'), date: (d ? d.toISOString() : new Date().toISOString()), productId: pid, type: type, qty: m2(qty), note: note || '' });
+  DB.stockMoves.push({ 
+    id: uid('mv'), 
+    date: (d ? d.toISOString() : new Date().toISOString()), 
+    productId: pid, 
+    type: type, 
+    qty: m2(qty), 
+    note: note || '' 
+  });
+}
+
+function applyStockChange(pid, qtyChange, moveType, moveNote, operationName) {
+  if (!checkStock(pid, qtyChange, operationName)) {
+    return false;
+  }
+  
+  var p = productById(pid);
+  p.stock = m2(num(p.stock) + qtyChange);
+  addStockMove(moveType, pid, Math.abs(qtyChange), moveNote);
+  
+  return true;
 }
 function stockMovesFor(pid) {
   return DB.stockMoves.filter(function (m) { return !pid || m.productId === pid; })
@@ -903,9 +1188,29 @@ function toast(msg, kind) {
   toastRoot.appendChild(el);
   setTimeout(function () { el.style.opacity = '0'; el.style.transition = 'opacity .25s'; setTimeout(function () { el.remove(); }, 260); }, 2200);
 }
+var _reopenSheetCallback = null;
+
+/**
+ * سیستم Sheet با پشتیبانی از Nested Sheets
+ * 
+ * چرخه حیات:
+ * 1. وقتی sheet جدید باز می‌شود، sheet قبلی پنهان می‌شود (نه بسته)
+ * 2. وقتی sheet بسته می‌شود، sheet قبلی دوباره نشان داده می‌شود
+ * 3. state (مبلغ، یادداشت، id، تاریخ) خودکار حفظ می‌شود
+ */
+var _sheetStack = [];
+
 function sheet(opts) {
-  closeSheet();
+  // اگر sheet قبلی وجود دارد، پنهانش کن
+  var currentSheet = sheetRoot.querySelector('.sheet-wrapper');
+  if (currentSheet) {
+    _sheetStack.push(currentSheet);
+    currentSheet.style.display = 'none';
+  }
+  
+  _reopenSheetCallback = opts.reopenCallback || null;
   var wrap = document.createElement('div');
+  wrap.className = 'sheet-wrapper';
   var headHtml = '';
   if (opts.title !== '') {
     headHtml = '<div class="sheet-head"><b>' + esc(opts.title) + '</b>' +
@@ -947,9 +1252,22 @@ function clearDatePickerHandlers() {
   _datePickerHandlers = [];
 }
 function closeSheet() {
-  sheetRoot.innerHTML = '';
-  document.body.style.overflow = '';
+  var currentSheet = sheetRoot.querySelector('.sheet-wrapper');
+  if (currentSheet) {
+    currentSheet.remove();
+  }
+  
   clearDatePickerHandlers();
+  
+  // اگر sheet قبلی در stack وجود دارد، دوباره نشانش بده
+  if (_sheetStack.length > 0) {
+    var prevSheet = _sheetStack.pop();
+    prevSheet.style.display = '';
+  } else {
+    document.body.style.overflow = '';
+    _reopenSheetCallback = null;
+    _datePickerValues = {}; // فقط وقتی همه sheets بسته شدند پاک کن
+  }
 }
 function confirmBox(title, msg, onYes, yesTxt) {
   sheet({
@@ -1005,7 +1323,10 @@ function render(noScroll) {
 function go(r) {
   // وقتی وارد صفحه فروش می‌شود و سبد خالی است، اطلاعات فاکتور ریست شود
   if (r === 'sale' && !cart.length) resetInvoice();
-  route = r; render();
+  route = r;
+  // به‌روزرسانی URL hash برای حفظ صفحه هنگام refresh
+  if (location.hash !== '#' + r) location.hash = r;
+  render();
 }
 
 function emptyBox(title, desc, btn) {
@@ -1183,12 +1504,17 @@ function viewSale() {
   // ═══ A. اطلاعات فاکتور ═══
   h += '<div class="card" style="margin-bottom:10px">';
   var custOpts = '<option value="">— مشتری نقدی —</option>';
-  DB.customers.forEach(function (c) { if (!c.disabled) custOpts += '<option value="' + c.id + '"' + (invoiceCustomer === c.id ? ' selected' : '') + '>' + esc(c.name) + '</option>'; });
+  DB.accounts.forEach(function (acc) { 
+    if (acc.type === 'customer' && !acc.disabled) {
+      var custId = acc.oldId || acc.id;
+      custOpts += '<option value="' + custId + '"' + (invoiceCustomer === custId ? ' selected' : '') + '>' + esc(acc.name) + '</option>';
+    }
+  });
   h += '<div class="row2">';
   h += fld('مشتری', '<select class="input" data-on="invCustomer">' + custOpts + '</select>');
   h += fld('شماره فاکتور', '<input class="input tnum" value="' + toFa(nextNo) + '" disabled style="background:var(--surface2)">');
   h += '</div>';
-  h += fld('تاریخ', '<input class="input" type="text" readonly value="' + esc(faDate(invoiceDate)) + '" data-iso="' + esc(invoiceDate) + '" onclick="openInvoiceDatePicker()" style="cursor:pointer;background:var(--surface)">');
+  h += fld('تاریخ', '<input class="input" type="text" readonly value="' + esc(faDate(invoiceDate)) + '" data-iso="' + esc(invoiceDate) + '" data-act="openInvoiceDatePicker" style="cursor:pointer;background:var(--surface)">');
   h += '</div>';
 
   // ═══ B. اقلام فاکتور ═══
@@ -1491,7 +1817,7 @@ function viewMore() {
 function viewReport() {
   var s = summary(repRange);
   var h = '';
-  h += '<div class="chips">' + chipBtn('today', 'امروز') + chipBtn('week', '۷ روز') + chipBtn('month', '۳۰ روز') + chipBtn('all', 'همه') + '</div>';
+  h += '<div class="chips">' + chipBtn('today', 'امروز') + chipBtn('week', 'این هفته') + chipBtn('month', 'این ماه') + chipBtn('all', 'همه') + '</div>';
   h += '<div class="stats">' +
     stat('فروش', money(s.sales), toFa(s.count) + ' فاکتور', 'pri') +
     stat('نقدی', money(s.cash), '', 'info') +
@@ -1539,7 +1865,7 @@ function viewAnalysis() {
   var h = '';
   var range = repRange === 'all' ? 'month' : repRange;
   
-  h += '<div class="chips">' + chipBtn('week', '۷ روز') + chipBtn('month', '۳۰ روز') + '</div>';
+  h += '<div class="chips">' + chipBtn('week', 'این هفته') + chipBtn('month', 'این ماه') + '</div>';
   
   // ۱. روند فروش
   h += '<div class="section-title">روند فروش</div>';
@@ -1677,23 +2003,94 @@ function createSale(opts) {
   var paid = Math.min(opts.paid, total);
   var due = m2(total - paid);
   if (due > 0 && !opts.customerId) return toast('برای فروش بردگی، مشتری را انتخاب کنید', 'warn');
-  var c = opts.customerId ? customerById(opts.customerId) : null;
+  
+  // اگر مشتری انتخاب نشده، از حساب پیش‌فرض "مشتری نقدی" استفاده کن
+  var customerId = opts.customerId;
+  if (!customerId) {
+    var cashCustomer = DB.accounts.find(function(a) { return a.type === 'customer' && a.name === 'مشتری نقدی'; });
+    if (!cashCustomer) {
+      cashCustomer = {
+        id: uid('acc'),
+        oldId: uid('cus'),
+        type: 'customer',
+        name: 'مشتری نقدی',
+        phone: '',
+        address: '',
+        opening: 0,
+        note: 'حساب پیش‌فرض برای فروش‌های نقدی',
+        pinned: false,
+        disabled: false,
+        createdAt: new Date().toISOString()
+      };
+      DB.accounts.push(cashCustomer);
+      DB.customers.push({
+        id: cashCustomer.oldId,
+        name: cashCustomer.name,
+        phone: '',
+        address: '',
+        opening: 0,
+        note: cashCustomer.note,
+        createdAt: cashCustomer.createdAt
+      });
+    }
+    customerId = cashCustomer.oldId;
+  } else {
+    // اگر customerId یک account.id است، آن را به customer.id تبدیل کن
+    var acc = DB.accounts.find(function(a) { return a.id === customerId; });
+    if (acc && acc.oldId) {
+      customerId = acc.oldId;
+    }
+  }
+  
+  var c = customerById(customerId);
+  // اگر customer در DB.customers نیست، از DB.accounts بخوان
+  if (!c) {
+    var acc = DB.accounts.find(function(a) { return (a.oldId === customerId || a.id === customerId) && a.type === 'customer'; });
+    if (acc) {
+      c = { id: acc.oldId || acc.id, name: acc.name, phone: acc.phone, address: acc.address, opening: acc.opening, note: acc.note };
+    }
+  }
   var saleDate = opts.date || new Date();
   DB.counters.sale = (DB.counters.sale || 0) + 1;
   var sale = {
     id: uid('sal'), no: DB.counters.sale, date: saleDate.toISOString(),
-    customerId: opts.customerId || null, customerName: c ? c.name : '',
+    customerId: customerId, customerName: c ? c.name : '',
     items: cart.map(function (x) { return { pid: x.pid, name: x.name, unit: x.unit, qty: num(x.qty), price: m2(x.price), cost: m2(x.cost) }; }),
     subtotal: sub, discount: m2(opts.discount), total: total, paid: m2(paid), due: due, note: opts.note || ''
   };
+  
+  // چک کردن موجودی همه کالاها قبل از کاهش
+  var stockCheckFailed = false;
   sale.items.forEach(function (it) {
-    var p = productById(it.pid);
-    if (p) { p.stock = m2(num(p.stock) - num(it.qty)); addStockMove('sale', it.pid, -num(it.qty), 'فاکتور ' + sale.no, saleDate); }
+    if (!checkStock(it.pid, -num(it.qty), 'فروش')) {
+      stockCheckFailed = true;
+    }
   });
+  
+  if (stockCheckFailed) {
+    toast('ثبت فاکتور لغو شد. موجودی کافی نیست.', 'bad');
+    return;
+  }
+  
+  // اعمال کاهش موجودی
+  sale.items.forEach(function (it) {
+    applyStockChange(it.pid, -num(it.qty), 'sale', 'فاکتور ' + sale.no, 'فروش');
+  });
+  
   DB.sales.push(sale);
   // ورود به خزانه (بخش نقدی فاکتور)
   if (paid > 0) {
     addTreasury('in', paid, 'فروش فاکتور ' + sale.no, 'نقد', saleDate.toISOString(), sale.note, 'sale');
+  }
+  // ثبت آوردگی در حساب مشتری (اگر پرداختی داشته)
+  if (paid > 0) {
+    DB.payments.push({
+      id: uid('pay'),
+      customerId: customerId,
+      amount: paid,
+      note: 'پرداخت فاکتور ' + sale.no,
+      date: saleDate.toISOString()
+    });
   }
   save();
   cart = [];
@@ -1716,6 +2113,16 @@ function createSale(opts) {
 }
 
 var ACT = {
+  /* تاریخ‌گیرها */
+  openInvoiceDatePicker: function () { openInvoiceDatePicker(); },
+  openAccPayDatePicker: function () { openAccPayDatePicker(); },
+  openAccDebtDatePicker: function () { openAccDebtDatePicker(); },
+  openTxDatePicker: function () { openTxDatePicker(); },
+  openTrsDatePicker: function () { openTrsDatePicker(); },
+  openPurDatePicker: function () { openPurDatePicker(); },
+  openEditTxDatePicker: function () { openEditTxDatePicker(); },
+  openClDatePicker: function () { openClDatePicker(); },
+  
   /* ناوبری */
   goSale: function () { go('sale'); }, goStock: function () { go('stock'); }, goReports: function () { go('more'); },
   goAccounts: function () { go('accounts'); },
@@ -1785,6 +2192,27 @@ var ACT = {
     var openingType = $('#editAccOpeningCredit').classList.contains('on') ? 'credit' : 'debit';
     acc.opening = openingType === 'credit' ? -openingBal : openingBal;
     
+    // آپدیت customer یا supplier مربوطه
+    if (acc.type === 'customer' && acc.oldId) {
+      var cust = customerById(acc.oldId);
+      if (cust) {
+        cust.name = acc.name;
+        cust.phone = acc.phone;
+        cust.address = acc.address;
+        cust.opening = acc.opening;
+        cust.note = acc.note;
+      }
+    } else if (acc.type === 'supplier' && acc.oldId) {
+      var supp = supplierById(acc.oldId);
+      if (supp) {
+        supp.name = acc.name;
+        supp.phone = acc.phone;
+        supp.address = acc.address;
+        supp.opening = acc.opening;
+        supp.note = acc.note;
+      }
+    }
+    
     save(); closeSheet(); render();
     toast('حساب به‌روزرسانی شد', 'ok');
   },
@@ -1839,15 +2267,17 @@ var ACT = {
     if (!acc) return;
     
     var b = accountBalance(id);
+    var dateIso = _datePickerValues['accPayDate'] || todayInput();
     sheet({
       title: 'آوردگی — ' + acc.name,
       body:
         fld('مبلغ', '<input class="input tnum" id="accPayAmount" inputmode="decimal" data-focus placeholder="۰">') +
         fld('خزانه', '<div class="seg"><button class="on" data-act="payTreasury" data-v="yes" id="payTrYes">با خزانه</button><button data-act="payTreasury" data-v="no" id="payTrNo">بدون خزانه</button></div>') +
 
-        fld('تاریخ', '<input class="input" type="text" readonly id="accPayDate" data-iso="' + todayInput() + '" value="' + esc(faDate(todayInput())) + '" onclick="openAccPayDatePicker()" style="cursor:pointer;background:var(--surface)">') +
+        fld('تاریخ', '<input class="input" type="text" readonly id="accPayDate" data-iso="' + dateIso + '" value="' + esc(faDate(dateIso)) + '" data-act="openAccPayDatePicker" style="cursor:pointer;background:var(--surface)">') +
         fld('یادداشت', '<input class="input" id="accPayNote" placeholder="اختیاری">'),
-      foot: '<button class="btn outline" data-act="closeSheet">انصراف</button><button class="btn success" data-act="saveAccPay" data-id="' + id + '">ثبت</button>'
+      foot: '<button class="btn outline" data-act="closeSheet">انصراف</button><button class="btn success" data-act="saveAccPay" data-id="' + id + '">ثبت</button>',
+      reopenCallback: function() { ACT.accPayForm({ dataset: { id: id } }); }
     });
   },
   saveAccPay: function (el) {
@@ -1869,6 +2299,7 @@ var ACT = {
     }
     
     PAY_WITH_TREASURY = true;
+    delete _datePickerValues['accPayDate'];
     save(); closeSheet();
     setTimeout(function() { showAccount(id); }, 200);
     toast('آوردگی ' + money(amount) + ' ثبت شد', 'ok');
@@ -1879,15 +2310,17 @@ var ACT = {
     if (!acc) return;
     
     var b = accountBalance(id);
+    var dateIso = _datePickerValues['accDebtDate'] || todayInput();
     sheet({
       title: 'بردگی — ' + acc.name,
       body:
         fld('مبلغ', '<input class="input tnum" id="accDebtAmount" inputmode="decimal" data-focus placeholder="۰">') +
         fld('خزانه', '<div class="seg"><button class="on" data-act="payTreasury" data-v="yes" id="payTrYes">با خزانه</button><button data-act="payTreasury" data-v="no" id="payTrNo">بدون خزانه</button></div>') +
 
-        fld('تاریخ', '<input class="input" type="text" readonly id="accDebtDate" data-iso="' + todayInput() + '" value="' + esc(faDate(todayInput())) + '" onclick="openAccDebtDatePicker()" style="cursor:pointer;background:var(--surface)">') +
+        fld('تاریخ', '<input class="input" type="text" readonly id="accDebtDate" data-iso="' + dateIso + '" value="' + esc(faDate(dateIso)) + '" data-act="openAccDebtDatePicker" style="cursor:pointer;background:var(--surface)">') +
         fld('یادداشت', '<input class="input" id="accDebtNote" placeholder="اختیاری">'),
-      foot: '<button class="btn outline" data-act="closeSheet">انصراف</button><button class="btn warning" data-act="saveAccDebt" data-id="' + id + '">ثبت</button>'
+      foot: '<button class="btn outline" data-act="closeSheet">انصراف</button><button class="btn warning" data-act="saveAccDebt" data-id="' + id + '">ثبت</button>',
+      reopenCallback: function() { ACT.accDebtForm({ dataset: { id: id } }); }
     });
   },
   saveAccDebt: function (el) {
@@ -1909,6 +2342,7 @@ var ACT = {
     }
     
     PAY_WITH_TREASURY = true;
+    delete _datePickerValues['accDebtDate'];
     save(); closeSheet();
     setTimeout(function() { showAccount(id); }, 200);
     toast('بردگی ' + money(amount) + ' ثبت شد', 'ok');
@@ -1995,7 +2429,12 @@ var ACT = {
     if (!cart.length) return;
     var sub = cartSubtotal();
     var opts = '<option value="">— مشتری نقدی —</option>';
-    DB.customers.forEach(function (c) { opts += '<option value="' + c.id + '">' + esc(c.name) + '</option>'; });
+    DB.accounts.forEach(function (acc) { 
+      if (acc.type === 'customer' && !acc.disabled) {
+        var custId = acc.oldId || acc.id;
+        opts += '<option value="' + custId + '">' + esc(acc.name) + '</option>';
+      }
+    });
     sheet({
       title: 'تسویه و ثبت فاکتور',
       body:
@@ -2096,22 +2535,136 @@ var ACT = {
   delSale: function (el) {
     var id = el.dataset.id;
     requirePin(function () {
-      confirmBox('حذف فاکتور', 'موجودی کالاها به انبار برمی‌گردد. مطمئن هستید؟', function () {
-        var i = DB.sales.findIndex(function (x) { return x.id === id; }); if (i < 0) return;
-        DB.sales[i].items.forEach(function (it) { var p = productById(it.pid); if (p) { p.stock = m2(num(p.stock) + num(it.qty)); addStockMove('sale', it.pid, num(it.qty), 'حذف فاکتور ' + DB.sales[i].no); } });
-        DB.sales.splice(i, 1); save(); render(); toast('فاکتور حذف شد', 'ok');
+      confirmBox('حذف فاکتور', 'موجودی کالاها به انبار برمی‌گردد، رکوردهای خزانه و پرداخت‌های مرتبط حذف می‌شوند. مطمئن هستید؟', function () {
+        var saleIndex = DB.sales.findIndex(function (x) { return x.id === id; });
+        if (saleIndex < 0) return toast('فاکتور یافت نشد', 'warn');
+        
+        var sale = DB.sales[saleIndex];
+        var saleNo = sale.no;
+        
+        // 1. برگرداندن موجودی کالاها
+        sale.items.forEach(function (it) {
+          applyStockChange(it.pid, num(it.qty), 'return', 'برگشت از حذف فاکتور ' + saleNo, 'حذف فاکتور');
+        });
+        
+        // 2. حذف رکوردهای خزانه وابسته به این فاکتور
+        // شناسایی با reason: 'فروش فاکتور X'
+        var treasuryReason = 'فروش فاکتور ' + saleNo;
+        var treasuryBefore = DB.treasury.length;
+        DB.treasury = DB.treasury.filter(function (t) {
+          return t.reason !== treasuryReason;
+        });
+        var treasuryRemoved = treasuryBefore - DB.treasury.length;
+        
+        // 3. حذف پرداخت‌های مرتبط با این فاکتور
+        // شناسایی با note: 'پرداخت فاکتور X'
+        var paymentNote = 'پرداخت فاکتور ' + saleNo;
+        var paymentsBefore = DB.payments.length;
+        DB.payments = DB.payments.filter(function (p) {
+          return p.note !== paymentNote;
+        });
+        var paymentsRemoved = paymentsBefore - DB.payments.length;
+        
+        // 4. حذف فاکتور
+        DB.sales.splice(saleIndex, 1);
+        
+        // 5. ذخیره و نمایش نتیجه
+        save();
+        render();
+        
+        var msg = 'فاکتور ' + toFa(saleNo) + ' حذف شد';
+        if (treasuryRemoved > 0) msg += '، ' + toFa(treasuryRemoved) + ' رکورد خزانه';
+        if (paymentsRemoved > 0) msg += '، ' + toFa(paymentsRemoved) + ' پرداخت';
+        msg += ' حذف شد';
+        
+        toast(msg, 'ok');
       });
     });
   },
   editSale: function (el) { editSale(el.dataset.id); },
   saveEditSale: function (el) {
-    var id = el.dataset.id, s = DB.sales.find(function (x) { return x.id === id; }); if (!s) return;
-    var cid = $('#edCustomer').value, disc = num($('#edDiscount').value), total = m2(s.subtotal - disc);
-    if (total < 0) return toast('تخفیف از جمع بیشتر است', 'bad');
-    var paid = Math.min(num($('#edPaid').value), total), due = m2(total - paid);
-    var c = cid ? customerById(cid) : null;
-    s.discount = m2(disc); s.total = total; s.paid = m2(paid); s.due = due; s.customerId = cid || null; s.customerName = c ? c.name : '';
-    EDIT_ID = ''; save(); closeSheet(); render(); toast('فاکتور به‌روزرسانی شد', 'ok');
+    var id = el.dataset.id;
+    var s = DB.sales.find(function (x) { return x.id === id; });
+    if (!s) return;
+    
+    // مقادیر قبلی
+    var oldPaid = m2(s.paid);
+    var oldCustomerId = s.customerId;
+    
+    // مقادیر جدید
+    var newCustomerId = $('#edCustomer').value || null;
+    var newDiscount = num($('#edDiscount').value);
+    var newTotal = m2(s.subtotal - newDiscount);
+    
+    // اعتبارسنجی: تخفیف بزرگ‌تر از subtotal
+    if (newTotal < 0) {
+      return toast('تخفیف نمی‌تواند از جمع اقلام بیشتر باشد', 'bad');
+    }
+    
+    // اعتبارسنجی: paid بیشتر از total را clamp کن
+    var newPaid = Math.min(num($('#edPaid').value), newTotal);
+    var newDue = m2(newTotal - newPaid);
+    
+    // پیدا کردن مشتری جدید
+    var newCustomer = newCustomerId ? customerById(newCustomerId) : null;
+    
+    // محاسبه اختلاف paid
+    var paidDiff = m2(newPaid - oldPaid);
+    
+    // 1. اصلاح خزانه اگر paid تغییر کرده
+    if (paidDiff !== 0) {
+      var treasuryReason = 'فروش فاکتور ' + s.no;
+      
+      if (paidDiff > 0) {
+        // paid افزایش یافته → ثبت رکورد جدید در treasury
+        addTreasury('in', paidDiff, treasuryReason, 'نقد', new Date().toISOString(), 'اصلاح فاکتور (افزایش پرداخت)', 'sale');
+      } else {
+        // paid کاهش یافته → حذف یا اصلاح رکورد treasury
+        var absDiff = Math.abs(paidDiff);
+        var treasuryRecord = DB.treasury.find(function(t) {
+          return t.reason === treasuryReason && t.type === 'in';
+        });
+        
+        if (treasuryRecord) {
+          if (treasuryRecord.amount <= absDiff) {
+            // رکورد treasury کوچک‌تر یا مساوی اختلاف است → حذف کامل
+            DB.treasury = DB.treasury.filter(function(t) { return t.id !== treasuryRecord.id; });
+            // اگر هنوز اختلاف باقی مانده، رکورد منفی ثبت کن
+            var remaining = m2(absDiff - treasuryRecord.amount);
+            if (remaining > 0) {
+              addTreasury('out', remaining, treasuryReason, 'نقد', new Date().toISOString(), 'اصلاح فاکتور (کاهش پرداخت)', 'sale');
+            }
+          } else {
+            // رکورد treasury بزرگ‌تر از اختلاف است → کاهش مبلغ
+            treasuryRecord.amount = m2(treasuryRecord.amount - absDiff);
+          }
+        }
+      }
+    }
+    
+    // 2. به‌روزرسانی فاکتور
+    s.discount = m2(newDiscount);
+    s.total = newTotal;
+    s.paid = m2(newPaid);
+    s.due = newDue;
+    s.customerId = newCustomerId;
+    s.customerName = newCustomer ? newCustomer.name : '';
+    
+    // 3. ذخیره و نمایش
+    EDIT_ID = '';
+    save();
+    closeSheet();
+    
+    // نمایش فاکتور به‌روزرسانی شده
+    setTimeout(function() {
+      showSale(id);
+    }, 200);
+    
+    var msg = 'فاکتور به‌روزرسانی شد';
+    if (paidDiff !== 0) {
+      msg += ' (اختلاف پرداخت: ' + (paidDiff > 0 ? '+' : '') + toFa(group(paidDiff)) + ')';
+    }
+    toast(msg, 'ok');
   },
   returnSale: function (el) { returnSheet(el.dataset.id); },
   retPlus: function (el) { var i = +el.dataset.i, s = DB.sales.find(function (x) { return x.id === RETURN_ID; }), max = s ? num(s.items[i].qty) : 0; RET[i] = Math.min((RET[i] || 0) + 1, max); var inp = $('#ret_' + i); if (inp) inp.value = toFa(RET[i]); updateReturn(); },
@@ -2168,22 +2721,19 @@ var ACT = {
     var paid = sid ? Math.min(m2(num($('#purPaid').value)), total) : 0;
     var due = m2(total - paid);
     // به‌روزرسانی موجودی همه اقلام
-    receiptItems.forEach(function (it) {
-      var p = productById(it.pid); if (!p) return;
-      p.stock = m2(num(p.stock) + it.qty);
-      if (it.cost > 0) p.cost = it.cost;
-    });
-    DB.counters.purchase = (DB.counters.purchase || 0) + 1;
     var sup = sid ? supplierById(sid) : null;
+    receiptItems.forEach(function (it) {
+      applyStockChange(it.pid, it.qty, 'purchase', 'ورود کالا' + (sup ? ' از ' + sup.name : ''), 'خرید');
+      var p = productById(it.pid);
+      if (p && it.cost > 0) p.cost = it.cost;
+    });
+    
+    DB.counters.purchase = (DB.counters.purchase || 0) + 1;
     DB.purchases.push({
       id: uid('pur'), no: DB.counters.purchase, date: date.toISOString(),
       supplierId: sid || null, supplierName: sup ? sup.name : '',
       items: receiptItems.map(function (it) { return { pid: it.pid, name: it.name, unit: it.unit, qty: it.qty, cost: it.cost }; }),
       freight: freight, other: other, total: total, paid: paid, due: due, note: $('#purNote').value.trim()
-    });
-    // ثبت حرکت انبار برای هر قلم
-    receiptItems.forEach(function (it) {
-      addStockMove('purchase', it.pid, it.qty, 'ورود کالا' + (sup ? ' از ' + sup.name : ''), date);
     });
     // خروج از خزانه (پرداخت نقدی به فراهم‌کننده)
     if (paid > 0) {
@@ -2201,9 +2751,13 @@ var ACT = {
     var pid = el.dataset.id, p = productById(pid); if (!p) return;
     var qty = num($('#adjQty').value), reason = $('#adjReason').value;
     if (!qty) return toast('مقدار را وارد کنید', 'warn');
-    p.stock = m2(num(p.stock) + qty);
+    
+    // چک کردن موجودی اگر کاهش است
+    if (!applyStockChange(pid, qty, 'adjust', 'اصلاح: ' + reason, 'اصلاح موجودی')) {
+      return;
+    }
+    
     DB.stockAdjustments.push({ id: uid('adj'), productId: pid, qty: m2(qty), reason: reason, note: $('#adjNote').value.trim(), date: new Date().toISOString() });
-    addStockMove('adjust', pid, qty, 'اصلاح: ' + reason);
     save(); closeSheet(); render(); toast('موجودی اصلاح شد', 'ok');
   },
   showMovements: function (el) { showMovements(el.dataset.id); },
@@ -2214,8 +2768,39 @@ var ACT = {
   saveCustomer: function (el) {
     var id = el.dataset.id, name = $('#cName').value.trim(); if (!name) return toast('نام مشتری لازم است', 'warn');
     var data = { name: name, phone: toEn($('#cPhone').value), address: $('#cAddress').value.trim(), opening: m2(num($('#cOpening').value)), note: $('#cNote').value.trim() };
-    if (id) { Object.assign(customerById(id), data); toast('ذخیره شد', 'ok'); }
-    else { data.id = uid('cus'); data.createdAt = new Date().toISOString(); DB.customers.push(data); toast('مشتری اضافه شد', 'ok'); }
+    if (id) { 
+      Object.assign(customerById(id), data); 
+      // آپدیت account مربوطه
+      var acc = DB.accounts.find(function(a) { return a.oldId === id && a.type === 'customer'; });
+      if (acc) {
+        acc.name = data.name;
+        acc.phone = data.phone;
+        acc.address = data.address;
+        acc.opening = data.opening;
+        acc.note = data.note;
+      }
+      toast('ذخیره شد', 'ok'); 
+    }
+    else { 
+      data.id = uid('cus'); 
+      data.createdAt = new Date().toISOString(); 
+      DB.customers.push(data); 
+      // اضافه کردن به accounts
+      DB.accounts.push({
+        id: uid('acc'),
+        oldId: data.id,
+        type: 'customer',
+        name: data.name,
+        phone: data.phone,
+        address: data.address,
+        opening: data.opening,
+        note: data.note,
+        pinned: false,
+        disabled: false,
+        createdAt: data.createdAt
+      });
+      toast('مشتری اضافه شد', 'ok'); 
+    }
     save(); closeSheet(); render();
   },
   openCustomer: function (el) { showCustomer(el.dataset.id); },
@@ -2246,7 +2831,7 @@ var ACT = {
         fld('توضیحات', '<input class="input" id="txDesc" placeholder="مثلاً آوردگی نقدی">') +
         fld('شماره فاکتور (اختیاری)', '<input class="input" id="txInvNo" placeholder="INV-...">') +
         '<div class="row2">' +
-        fld('تاریخ', '<input class="input" type="text" readonly id="txDate" data-iso="' + todayInput() + '" value="' + esc(faDate(todayInput())) + '" onclick="openTxDatePicker()" style="cursor:pointer;background:var(--surface)">') +
+        fld('تاریخ', '<input class="input" type="text" readonly id="txDate" data-iso="' + todayInput() + '" value="' + esc(faDate(todayInput())) + '" data-act="openTxDatePicker" style="cursor:pointer;background:var(--surface)">') +
         fld('ساعت', '<input class="input" type="time" id="txTime" value="' + new Date().toTimeString().slice(0,5) + '">') +
         '</div>',
       foot: '<button class="btn outline" data-act="closeSheet">انصراف</button><button class="btn" data-act="saveTx" data-cid="' + cid + '">ثبت تراکنش</button>'
@@ -2319,15 +2904,15 @@ var ACT = {
       var btn = e.target.closest('[data-tact]'); if (!btn) return;
       var act = btn.dataset.tact;
       closeContextMenu();
-      if (act === 'del') {
+      if (act === 'edit') {
+        editTransaction(txid, cid);
+      } else if (act === 'del') {
         confirmBox('حذف تراکنش', 'آیا از حذف این تراکنش مطمئن هستید؟', function () {
           var parts = txid.split('_');
           var kind = parts[0], tid = parts.slice(1).join('_');
           if (kind === 'pay') {
             DB.payments = DB.payments.filter(function (p) { return p.id !== tid; });
           } else if (kind === 'adj') {
-      } else if (act === 'edit') {
-        editTransaction(txid, cid);
             DB.accountAdjustments = DB.accountAdjustments.filter(function (a) { return a.id !== tid; });
           } else if (kind === 'sale') {
             toast('فاکتور از اینجا قابل حذف نیست', 'warn'); return;
@@ -2580,8 +3165,39 @@ var ACT = {
   saveSupplier: function (el) {
     var id = el.dataset.id, name = $('#cName').value.trim(); if (!name) return toast('نام فراهم‌کننده لازم است', 'warn');
     var data = { name: name, phone: toEn($('#cPhone').value), address: $('#cAddress').value.trim(), opening: m2(num($('#cOpening').value)), note: $('#cNote').value.trim() };
-    if (id) { Object.assign(supplierById(id), data); toast('ذخیره شد', 'ok'); }
-    else { data.id = uid('sup'); data.createdAt = new Date().toISOString(); DB.suppliers.push(data); toast('فراهم‌کننده اضافه شد', 'ok'); }
+    if (id) { 
+      Object.assign(supplierById(id), data); 
+      // آپدیت account مربوطه
+      var acc = DB.accounts.find(function(a) { return a.oldId === id && a.type === 'supplier'; });
+      if (acc) {
+        acc.name = data.name;
+        acc.phone = data.phone;
+        acc.address = data.address;
+        acc.opening = data.opening;
+        acc.note = data.note;
+      }
+      toast('ذخیره شد', 'ok'); 
+    }
+    else { 
+      data.id = uid('sup'); 
+      data.createdAt = new Date().toISOString(); 
+      DB.suppliers.push(data); 
+      // اضافه کردن به accounts
+      DB.accounts.push({
+        id: uid('acc'),
+        oldId: data.id,
+        type: 'supplier',
+        name: data.name,
+        phone: data.phone,
+        address: data.address,
+        opening: data.opening,
+        note: data.note,
+        pinned: false,
+        disabled: false,
+        createdAt: data.createdAt
+      });
+      toast('فراهم‌کننده اضافه شد', 'ok'); 
+    }
     save(); closeSheet(); render();
   },
   openSupplier: function (el) { showSupplier(el.dataset.id); },
@@ -2617,7 +3233,7 @@ var ACT = {
         fld('مبلغ', '<input class="input tnum" id="trsAmount" inputmode="decimal" data-focus placeholder="۰">') +
         fld('دلیل', '<select class="input" id="trsReason"><option>فروش نقدی</option><option>آورگی مشتری</option><option>سایر</option></select>') +
 
-        fld('تاریخ', '<input class="input" type="text" readonly id="trsDate" data-iso="' + todayInput() + '" value="' + esc(faDate(todayInput())) + '" onclick="openTrsDatePicker()" style="cursor:pointer;background:var(--surface)">') +
+        fld('تاریخ', '<input class="input" type="text" readonly id="trsDate" data-iso="' + todayInput() + '" value="' + esc(faDate(todayInput())) + '" data-act="openTrsDatePicker" style="cursor:pointer;background:var(--surface)">') +
         fld('یادداشت', '<input class="input" id="trsNote" placeholder="اختیاری">'),
       foot: '<button class="btn outline" data-act="closeSheet">انصراف</button><button class="btn success" data-act="saveTrsIn">ثبت ورود</button>'
     });
@@ -2629,7 +3245,7 @@ var ACT = {
         fld('مبلغ', '<input class="input tnum" id="trsAmount" inputmode="decimal" data-focus placeholder="۰">') +
         fld('دلیل', '<select class="input" id="trsReason"><option>مصرف/خرج</option><option>پرداخت به فراهم‌کننده</option><option>برداشت شخصی</option><option>سایر</option></select>') +
 
-        fld('تاریخ', '<input class="input" type="text" readonly id="trsDate" data-iso="' + todayInput() + '" value="' + esc(faDate(todayInput())) + '" onclick="openTrsDatePicker()" style="cursor:pointer;background:var(--surface)">') +
+        fld('تاریخ', '<input class="input" type="text" readonly id="trsDate" data-iso="' + todayInput() + '" value="' + esc(faDate(todayInput())) + '" data-act="openTrsDatePicker" style="cursor:pointer;background:var(--surface)">') +
         fld('یادداشت', '<input class="input" id="trsNote" placeholder="اختیاری">'),
       foot: '<button class="btn outline" data-act="closeSheet">انصراف</button><button class="btn danger" data-act="saveTrsOut">ثبت خروج</button>'
     });
@@ -2701,6 +3317,33 @@ var ACT = {
       disabled: false,
       createdAt: new Date().toISOString()
     };
+    
+    // اگر مشتری یا فراهم‌کننده است، در DB.customers یا DB.suppliers هم اضافه کن
+    if (type === 'customer') {
+      var custId = uid('cus');
+      acc.oldId = custId;
+      DB.customers.push({
+        id: custId,
+        name: name,
+        phone: phone,
+        address: address,
+        opening: opening,
+        note: note,
+        createdAt: acc.createdAt
+      });
+    } else if (type === 'supplier') {
+      var suppId = uid('sup');
+      acc.oldId = suppId;
+      DB.suppliers.push({
+        id: suppId,
+        name: name,
+        phone: phone,
+        address: address,
+        opening: opening,
+        note: note,
+        createdAt: acc.createdAt
+      });
+    }
     
     DB.accounts.push(acc);
     save(); closeSheet(); render();
@@ -2860,7 +3503,15 @@ var ACT = {
   },
   savePin: function () {
     var has = !!DB.settings.pin;
-    if (has && toEn($('#pinOld').value).replace(/\D/g, '') !== DB.settings.pin) return toast('رمز فعلی اشتباه است', 'bad');
+    
+    // اگر PIN قبلی تنظیم شده، باید تأیید شود
+    if (has) {
+      var oldPin = toEn($('#pinOld').value).replace(/\D/g, '');
+      if (oldPin !== DB.settings.pin) {
+        return toast('رمز فعلی اشتباه است', 'bad');
+      }
+    }
+    
     var nw = toEn($('#pinNew').value).replace(/\D/g, ''), nw2 = toEn($('#pinNew2').value).replace(/\D/g, '');
     if (nw.length !== 4) return toast('رمز باید ۴ رقم باشد', 'warn');
     if (nw !== nw2) return toast('رمزهای جدید یکسان نیستند', 'warn');
@@ -2874,8 +3525,10 @@ var ACT = {
   restoreAuto: function () {
     var data = localStorage.getItem(KEY + '.auto');
     if (!data) return toast('نسخهٔ خودکار یافت نشد', 'warn');
-    confirmBox('بازیابی نسخهٔ خودکار', 'داده‌های فعلی با آخرین نسخهٔ پشتیبان خودکار جایگزین شوند؟', function () {
-      try { var d = JSON.parse(data); if (!d || !d.settings) throw new Error('bad'); localStorage.setItem(KEY, data); load(); applyTheme(); render(); toast('از نسخهٔ خودکار بازیابی شد', 'ok'); } catch (e) { toast('فایل معتبر نیست', 'bad'); }
+    requirePin(function () {
+      confirmBox('بازیابی نسخهٔ خودکار', 'داده‌های فعلی با آخرین نسخهٔ پشتیبان خودکار جایگزین شوند؟', function () {
+        try { var d = JSON.parse(data); if (!d || !d.settings) throw new Error('bad'); localStorage.setItem(KEY, data); load(); applyTheme(); render(); toast('از نسخهٔ خودکار بازیابی شد', 'ok'); } catch (e) { toast('فایل معتبر نیست', 'bad'); }
+      });
     });
   },
   warehouseHistory: function () { warehouseHistory(); },
@@ -2956,7 +3609,7 @@ function receiptForm(preselectSupplierId) {
       // بخش اطلاعات کلی رسید
       '<div style="font-size:13px;font-weight:700;margin-bottom:8px">اطلاعات رسید</div>' +
       '<div class="row2">' +
-      fld('تاریخ', '<input class="input" type="text" readonly id="purDate" data-iso="' + todayInput() + '" value="' + esc(faDate(todayInput())) + '" onclick="openPurDatePicker()" style="cursor:pointer;background:var(--surface)">') +
+      fld('تاریخ', '<input class="input" type="text" readonly id="purDate" data-iso="' + todayInput() + '" value="' + esc(faDate(todayInput())) + '" data-act="openPurDatePicker" style="cursor:pointer;background:var(--surface)">') +
       fld('فراهم‌کننده (اختیاری)', '<select class="input" id="purSupplier" data-on="purCalc">' + sup + '</select>') +
       '</div>' +
       '<div id="purSuppBox" style="display:none">' +
@@ -3328,7 +3981,7 @@ function showCustomer(id) {
     });
   }
 
-  sheet({ title: '', body: body });
+  sheet({ title: '', body: body, reopenCallback: function() { showCustomer(id); } });
 }
 
 /* پروفایل فراهم‌کننده */
@@ -3476,7 +4129,7 @@ function showSupplier(id) {
     });
   }
 
-  sheet({ title: '', body: body });
+  sheet({ title: '', body: body, reopenCallback: function() { showSupplier(id); } });
 }
 
 function payForm(id) { payFormTo(id, 'cust'); }
@@ -3871,6 +4524,9 @@ function showAccount(id) {
   var typeInfo = ACCOUNT_TYPES[acc.type] || ACCOUNT_TYPES.other;
   var color = balColorForAccount(b, acc.type);
   
+  // شناسه مشتری/فراهم‌کننده (oldId یا id)
+  var entityId = acc.oldId || acc.id;
+  
   // محاسبه مجموع بردگی و آوردگی
   var totalDebt = 0;  // مجموع بردگی
   var totalPayment = 0;  // مجموع آوردگی
@@ -3878,12 +4534,12 @@ function showAccount(id) {
   // برای مشتری
   if (acc.type === 'customer') {
     DB.sales.forEach(function(s) { 
-      if (s.customerId === acc.oldId && s.due !== 0) {
-        totalDebt += m2(s.due);
+      if (s.customerId === entityId) {
+        totalDebt += m2(s.total);
       }
     });
     DB.payments.forEach(function(p) { 
-      if (p.customerId === acc.oldId) {
+      if (p.customerId === entityId) {
         totalPayment += m2(p.amount);
       }
     });
@@ -3892,12 +4548,12 @@ function showAccount(id) {
   // برای فراهم‌کننده
   if (acc.type === 'supplier') {
     DB.purchases.forEach(function(p) { 
-      if (p.supplierId === acc.oldId && p.due !== 0) {
-        totalDebt += m2(p.due);
+      if (p.supplierId === entityId) {
+        totalDebt += m2(p.total);
       }
     });
     DB.supplierPayments.forEach(function(p) { 
-      if (p.supplierId === acc.oldId) {
+      if (p.supplierId === entityId) {
         totalPayment += m2(p.amount);
       }
     });
@@ -3917,18 +4573,18 @@ function showAccount(id) {
   // برای مشتری
   if (acc.type === 'customer') {
     DB.sales.forEach(function(s) { 
-      if (s.customerId === acc.oldId && s.due !== 0) {
+      if (s.customerId === entityId) {
         txns.push({
           id: 'sale_' + s.id,
           date: s.date,
           note: 'فاکتور ' + toFa(s.no),
-          delta: m2(s.due),
+          delta: m2(s.total),
           withTreasury: true
         });
       }
     });
     DB.payments.forEach(function(p) { 
-      if (p.customerId === acc.oldId) {
+      if (p.customerId === entityId) {
         txns.push({
           id: 'pay_' + p.id,
           date: p.date,
@@ -3943,18 +4599,18 @@ function showAccount(id) {
   // برای فراهم‌کننده
   if (acc.type === 'supplier') {
     DB.purchases.forEach(function(p) { 
-      if (p.supplierId === acc.oldId && p.due !== 0) {
+      if (p.supplierId === entityId) {
         txns.push({
           id: 'pur_' + p.id,
           date: p.date,
           note: 'فاکتور خرید ' + toFa(p.no),
-          delta: m2(p.due),
+          delta: m2(p.total),
           withTreasury: true
         });
       }
     });
     DB.supplierPayments.forEach(function(p) { 
-      if (p.supplierId === acc.oldId) {
+      if (p.supplierId === entityId) {
         txns.push({
           id: 'spay_' + p.id,
           date: p.date,
@@ -4095,7 +4751,7 @@ function showAccount(id) {
     }
   }
   
-  sheet({ title: '', body: body });
+  sheet({ title: '', body: body, reopenCallback: function() { showAccount(id); } });
 }
 
 function editAccount(id) {
@@ -4249,7 +4905,7 @@ function editTransaction(txid, accId) {
     body:
       fld("نوع", '<div class="seg"><button class="' + (isIn ? 'on' : '') + '" data-act="editTxType" data-v="income" id="editTxTypeIncome">آوردگی</button><button class="' + (!isIn ? 'on' : '') + '" data-act="editTxType" data-v="expense" id="editTxTypeExpense">بردگی</button></div>') +
       fld("مبلغ", '<input class="input tnum" id="editTxAmount" inputmode="decimal" value="' + toFa(amount) + '">') +
-      fld("تاریخ", '<input class="input" type="text" readonly id="editTxDate" data-iso="' + date + '" value="' + esc(faDate(date)) + '" onclick="openEditTxDatePicker()" style="cursor:pointer;background:var(--surface)">') +
+      fld("تاریخ", '<input class="input" type="text" readonly id="editTxDate" data-iso="' + date + '" value="' + esc(faDate(date)) + '" data-act="openEditTxDatePicker" style="cursor:pointer;background:var(--surface)">') +
       fld("یادداشت", '<input class="input" id="editTxNote" value="' + esc(note) + '">'),
     foot: '<button class="btn outline" data-act="closeSheet">انصراف</button><button class="btn" data-act="saveEditTransaction" data-txid="' + txid + '" data-accid="' + accId + '">ذخیره</button>'
   });
@@ -4428,11 +5084,18 @@ function editSale(id) {
   var s = DB.sales.find(function (x) { return x.id === id; }); if (!s) return;
   EDIT_ID = id;
   var opts = '<option value="">— مشتری نقدی —</option>';
-  DB.customers.forEach(function (c) { opts += '<option value="' + c.id + '"' + (s.customerId === c.id ? ' selected' : '') + '>' + esc(c.name) + '</option>'; });
+  DB.accounts.forEach(function (acc) { 
+    if (acc.type === 'customer' && !acc.disabled) {
+      var custId = acc.oldId || acc.id;
+      opts += '<option value="' + custId + '"' + (s.customerId === custId ? ' selected' : '') + '>' + esc(acc.name) + '</option>';
+    }
+  });
   var itemsHtml = s.items.map(function (it) { return '<div class="r"><span>' + esc(it.name) + ' × ' + qtyTxt(it.qty) + '</span><span>' + money(m2(it.price) * num(it.qty)) + '</span></div>'; }).join('');
   sheet({
     title: 'ویرایش فاکتور ' + toFa(s.no),
-    body: '<div class="card" style="box-shadow:none;background:var(--surface2);margin-bottom:12px">' + itemsHtml + '<hr><div class="r"><span>جمع اقلام</span><span class="tnum">' + money(s.subtotal) + '</span></div></div>' +
+    body: '<div class="card" style="box-shadow:none;background:var(--surface2);margin-bottom:12px">' + 
+      '<div style="font-size:11px;color:var(--warning);margin-bottom:8px;padding:6px;background:#fff3cd;border-radius:4px">⚠ اقلام فاکتور قابل ویرایش نیستند. برای تغییر اقلام، فاکتور را حذف و دوباره ثبت کنید.</div>' +
+      itemsHtml + '<hr><div class="r"><span>جمع اقلام</span><span class="tnum">' + money(s.subtotal) + '</span></div></div>' +
       fld('مشتری', '<select class="input" id="edCustomer">' + opts + '</select>') +
       '<div class="row2">' + fld('تخفیف', '<input class="input tnum" id="edDiscount" inputmode="decimal" data-focus value="' + toFa(s.discount) + '">') + fld('پرداختی', '<input class="input tnum" id="edPaid" inputmode="decimal" value="' + toFa(s.paid) + '">') + '</div>' +
       '<div id="edSummary" style="font-size:13px;color:var(--muted)"></div>',
@@ -4483,16 +5146,76 @@ function updateReturn() {
   box.innerHTML = h;
 }
 function doReturn(id) {
-  var s = DB.sales.find(function (x) { return x.id === id; }); if (!s) return;
-  s.items.forEach(function (it, i) { RET[i] = Math.max(0, Math.min(num(RET[i]), num(it.qty))); });
-  var totalRet = RET.reduce(function (a, b) { return a + b; }, 0); if (totalRet <= 0) { toast('کالایی انتخاب نشده', 'warn'); return; }
-  var r = returnValueOf(s, RET), due = s.due, paid = s.paid, rem = r.value;
-  var cutDue = Math.min(due, rem); due -= cutDue; rem -= cutDue; var cutPaid = Math.min(paid, rem); paid -= cutPaid; rem -= cutPaid;
+  var s = DB.sales.find(function (x) { return x.id === id; }); 
+  if (!s) return;
+  
+  // اعتبارسنجی: تعداد برگشتی نمی‌تواند بیشتر از qty اصلی باشد
+  s.items.forEach(function (it, i) { 
+    RET[i] = Math.max(0, Math.min(num(RET[i]), num(it.qty))); 
+  });
+  
+  var totalRet = RET.reduce(function (a, b) { return a + b; }, 0); 
+  if (totalRet <= 0) { 
+    toast('کالایی انتخاب نشده', 'warn'); 
+    return; 
+  }
+  
+  // محاسبه مبلغ برگشتی
+  var r = returnValueOf(s, RET);
+  var due = s.due;
+  var paid = s.paid;
+  var rem = r.value;
+  
+  // منطق cutDue و cutPaid (حفظ شده)
+  var cutDue = Math.min(due, rem); 
+  due -= cutDue; 
+  rem -= cutDue; 
+  
+  var cutPaid = Math.min(paid, rem); 
+  paid -= cutPaid; 
+  rem -= cutPaid;
+  
+  // 1. برگرداندن موجودی و کاهش qty در s.items
   var parts = [];
-  s.items.forEach(function (it, i) { var q = RET[i]; if (q > 0) { var p = productById(it.pid); if (p) { p.stock = m2(num(p.stock) + q); addStockMove('return', it.pid, q, 'برگشت فاکتور ' + s.no); } parts.push(it.name + ' × ' + qtyTxt(q)); } });
-  s.subtotal = m2(s.subtotal - r.itemSub); s.total = m2(s.total - r.value); s.due = m2(due); s.paid = m2(paid);
+  s.items.forEach(function (it, i) { 
+    var q = RET[i]; 
+    if (q > 0) { 
+      applyStockChange(it.pid, q, 'return', 'برگشت فاکتور ' + s.no, 'برگشت');
+      parts.push(it.name + ' × ' + qtyTxt(q));
+      
+      // کاهش qty در s.items
+      it.qty = m2(num(it.qty) - q);
+    } 
+  });
+  
+  // 2. حذف اقلام با qty = 0 از لیست
+  s.items = s.items.filter(function (it) { 
+    return num(it.qty) > 0; 
+  });
+  
+  // 3. ثبت تراکنش خزانه out برای cutPaid
+  if (cutPaid > 0) {
+    addTreasury('out', cutPaid, 'برگشت فاکتور ' + s.no, 'نقد', new Date().toISOString(), 'پرداخت به مشتری بابت برگشت', 'return');
+  }
+  
+  // 4. به‌روزرسانی فاکتور
+  s.subtotal = m2(s.subtotal - r.itemSub); 
+  s.total = m2(s.total - r.value); 
+  s.due = m2(due); 
+  s.paid = m2(paid);
+  
+  // 5. یادداشت برگشت
   s.note = (s.note ? s.note + '  ' : '') + '• برگشت: ' + parts.join('، ') + ' (' + money(r.value) + ')';
-  save(); render(); toast('برگشت ثبت شد — موجودی برگشت', 'ok');
+  
+  // 6. ذخیره و نمایش
+  save(); 
+  render(); 
+  
+  var msg = 'برگشت ثبت شد — موجودی برگشت';
+  if (cutPaid > 0) {
+    msg += '، ' + money(cutPaid) + ' به مشتری پرداخت شد';
+  }
+  toast(msg, 'ok');
 }
 
 /* بستن صندوق */
@@ -4500,13 +5223,34 @@ function todayInputSafe() { return todayInput(); }
 function closingSheet() {
   sheet({
     title: 'بستن صندوق',
-    body: '<div class="no-print" style="margin-bottom:12px">' + fld('روز مورد نظر', '<input class="input" type="text" readonly id="clDate" data-iso="' + todayInputSafe() + '" data-on="clDate" data-focus value="' + esc(faDate(todayInputSafe())) + '" onclick="openClDatePicker()" style="cursor:pointer;background:var(--surface)">') + '</div>' +
+    body: '<div class="no-print" style="margin-bottom:12px">' + fld('روز مورد نظر', '<input class="input" type="text" readonly id="clDate" data-iso="' + todayInputSafe() + '" data-on="clDate" data-focus value="' + esc(faDate(todayInputSafe())) + '" data-act="openClDatePicker" style="cursor:pointer;background:var(--surface)">') + '</div>' +
       '<div class="receipt" id="clReport"></div>' +
       '<div class="no-print" style="margin-top:12px">' + fld('نقد شمارش‌شده', '<input class="input tnum" id="clCounted" data-on="clCounted" inputmode="decimal" placeholder="۰">') + '</div>',
     foot: '<button class="btn outline" data-act="closeSheet">بستن</button><button class="btn success" data-act="printClosing">چاپ صورت‌مجلس</button>',
     onOpen: function () { updateClosing(); }
   });
 }
+/**
+ * صورت‌مجلس روزانه (Day Closing)
+ * 
+ * فرمول نقد سیستم (expected):
+ * expected = cashSales + payments - expenses - supplierPayments - purchasesPaid + treasuryManualIn - treasuryManualOut
+ * 
+ * منبع حقیقت:
+ * - sales.paid: فروش نقدی
+ * - payments: آوردگی از مشتری
+ * - expenses: مصارف
+ * - supplierPayments: پرداخت به فراهم‌کننده
+ * - purchases.paid: خرید نقدی
+ * - treasury (source === 'manual'): ورود/خروج دستی خزانه
+ * 
+ * توجه:
+ * - treasury با sourceهای sale/payment/expense فقط برای تاریخچه هستند و در expected شمرده نمی‌شوند
+ * - این جلوگیری از دوبار شمردن فروش نقدی (یک‌بار از sales.paid و یک‌بار از treasury in)
+ * 
+ * تعریف واحد «نقد سیستم»:
+ * نقد سیستم = مجموع همه جریان‌های نقدی از sales/payments/expenses/purchases/supplierPayments + ورود/خروج دستی خزانه
+ */
 function dayClosing(d) {
   var key = dayKey(d), cashSales = 0, creditSales = 0, count = 0, payments = 0, expenses = 0;
   var supplierPayments = 0, purchasesPaid = 0, treasuryIn = 0, treasuryOut = 0;
@@ -4539,13 +5283,16 @@ function dayClosing(d) {
     if (dayKey(new Date(p.date)) === key) purchasesPaid += m2(p.paid); 
   });
   
-  // تراکنش‌های دستی خزانه
+  // تراکنش‌های دستی خزانه (فقط source === 'manual')
   DB.treasury.forEach(function (t) {
     if (dayKey(new Date(t.date)) !== key) return;
-    if (t.type === 'in') treasuryIn += m2(t.amount);
-    else if (t.type === 'out') treasuryOut += m2(t.amount);
+    if (t.source === 'manual') {
+      if (t.type === 'in') treasuryIn += m2(t.amount);
+      else if (t.type === 'out') treasuryOut += m2(t.amount);
+    }
   });
   
+  // فرمول نقد سیستم
   var expected = m2(cashSales + payments - expenses - supplierPayments - purchasesPaid + treasuryIn - treasuryOut);
   
   return { 
@@ -4666,7 +5413,18 @@ var ON = {
   qProduct: function (v) { qProduct = v; softRender(); },
   qCustomer: function (v) { qCustomer = v; softRender(); },
   qSupplier: function (v) { qSupplier = v; softRender(); },
-  qty: function (v, el) { var i = +el.dataset.i; if (!cart[i]) return; cart[i].qty = Math.max(0, num(v)); },
+  qty: function (v, el) { 
+    var i = +el.dataset.i; 
+    if (!cart[i]) return; 
+    var newQty = Math.max(0, num(v));
+    var p = productById(cart[i].pid);
+    if (p && newQty > num(p.stock)) {
+      toast('موجودی ' + p.name + ' کافی نیست (فقط ' + toFa(p.stock) + ' ' + esc(p.unit || '') + ')', 'warn');
+      el.value = toFa(cart[i].qty); // برگرداندن مقدار قبلی
+      return;
+    }
+    cart[i].qty = newQty; 
+  },
   cartPrice: function (v, el) { var i = +el.dataset.i; if (!cart[i]) return; cart[i].price = Math.max(0, m2(num(v))); },
   invCustomer: function (v) {
     invoiceCustomer = v;
@@ -4762,6 +5520,22 @@ function softRender() {
 function init() {
   viewEl = $('#view'); sheetRoot = $('#sheetRoot'); toastRoot = $('#toastRoot');
   load(); applyTheme();
+  
+  // خواندن route از URL hash (برای حفظ صفحه هنگام refresh)
+  var validRoutes = ['home', 'sale', 'stock', 'accounts', 'treasury', 'more'];
+  var hashRoute = location.hash.replace('#', '');
+  if (validRoutes.indexOf(hashRoute) >= 0) route = hashRoute;
+  
+  // شنونده تغییر hash (دکمه back/forward مرورگر)
+  window.addEventListener('hashchange', function() {
+    var newRoute = location.hash.replace('#', '');
+    if (validRoutes.indexOf(newRoute) >= 0 && newRoute !== route) {
+      route = newRoute;
+      if (route === 'sale' && !cart.length) resetInvoice();
+      render();
+    }
+  });
+  
   document.querySelectorAll('.tab').forEach(function (t) { t.addEventListener('click', function () { go(t.dataset.go); }); });
   $('#themeBtn').addEventListener('click', function () { DB.settings.theme = DB.settings.theme === 'dark' ? 'light' : 'dark'; applyTheme(); save(); });
   $('#brandBtn').addEventListener('click', function () { go('home'); });
@@ -4819,7 +5593,7 @@ function lastTxColor(customerId) {
   return 'var(--muted)';
 }
 
-function lastTxColorSupplier(supplierId) {
+function lastTxColorSupplier(supplierId
   // بررسی آخرین تراکنش فراهم‌کننده
   var lastDate = null;
   var lastType = null; // 'debt' یا 'payment'
@@ -4848,3 +5622,5 @@ function lastTxColorSupplier(supplierId) {
   if (lastType === 'debt') return 'var(--danger)';
   return 'var(--muted)';
 }
+
+/* ══════════════ چاپ صورت‌حساب ══════════════ */
