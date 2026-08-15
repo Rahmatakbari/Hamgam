@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<!--
+  فروشگاه هم‌گام — نسخهٔ سه‌پرونده‌ای (موبایل)
+  ------------------------------------------------
+  این نسخه فقط سه فایل دارد و بدون اینترنت، بدون نصب و بدون سرور کار می‌کند:
+      index.html  ← همین فایل (اسکلت صفحه)
+      style.css   ← ظاهر و رنگ‌ها
+      app.js      ← تمام منطق برنامه
+
+  روی گوشی: هر سه فایل را در یک پوشه بگذارید و index.html را باز کنید.
+  در QuickEdit هم همان پوشه را باز کنید و روی index.html دکمهٔ Preview را بزنید.
+
+  نکته: عمداً هیچ کتابخانه‌ای از اینترنت گرفته نمی‌شود و <script> از نوع module نیست،
+  چون فایل‌های module وقتی مستقیم از حافظهٔ گوشی (file://) باز شوند اجرا نمی‌شوند.
+-->
+<html lang="fa" dir="rtl" data-theme="light">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#007bff">
+  <meta name="color-scheme" content="light dark">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="همگام">
+  <title>همگام - سیستم حسابداری همراه</title>
+  <link rel="manifest" href="manifest.json">
+  <link rel="apple-touch-icon" href="icon-192.png">
+  <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+
+  <!-- ═══════════ نوار بالا ═══════════ -->
+  <header class="appbar" id="appbar">
+    <div class="appbar-in">
+      <button class="brand" id="brandBtn" type="button">
+        <span class="brand-logo" aria-hidden="true">
+          <svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M3 3h2l.4 2M7 13h10l3-8H5.4M7 13 5.4 5M7 13l-.7 3.5h11.4M9 20a1 1 0 1 0 0-2 1 1 0 0 0 0 2Zm8 0a1 1 0 1 0 0-2 1 1 0 0 0 0 2Z" stroke="currentColor" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </span>
+        <span class="brand-txt">
+          <b id="shopName">فروشگاه هم‌گام</b>
+          <small id="todayLabel">—</small>
+        </span>
+      </button>
+
+      <div class="appbar-actions">
+        <button class="icon-btn" id="themeBtn" type="button" aria-label="تغییر تم">
+          <svg viewBox="0 0 24 24" width="20" height="20"><path id="themeIcon" fill="currentColor" d="M12 3a9 9 0 1 0 9 9c0-.3 0-.6-.05-.9A7 7 0 0 1 12.9 3.05C12.6 3 12.3 3 12 3Z"/></svg>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- ═══════════ محتوای صفحه (با جاوااسکریپت پر می‌شود) ═══════════ -->
+  <main class="view" id="view"></main>
+
+  <!-- ═══════════ ناوبری پایین (موبایل‌اول) ═══════════ -->
+  <nav class="tabbar" id="tabbar">
+    <button class="tab" data-go="home" type="button">
+      <svg viewBox="0 0 24 24" width="21" height="21"><path fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1Z"/></svg>
+      <span>خانه</span>
+    </button>
+    <button class="tab" data-go="sale" type="button">
+      <svg viewBox="0 0 24 24" width="21" height="21"><path fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Zm0 0V8h6M8 13h8M8 17h5M8 9h2"/></svg>
+      <span>فاکتور</span>
+    </button>
+    <button class="tab" data-go="stock" type="button">
+      <svg viewBox="0 0 24 24" width="21" height="21"><path fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" d="m12 2 9 5v10l-9 5-9-5V7Zm0 0v10m0 0 9-5m-9 5-9-5"/></svg>
+      <span>گدام</span>
+    </button>
+    <button class="tab" data-go="accounts" type="button">
+      <svg viewBox="0 0 24 24" width="21" height="21"><path fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" d="M16 20v-1a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4v1M9.5 11a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7ZM21 20v-1a4 4 0 0 0-3-3.9M16.5 4.1a4 4 0 0 1 0 7.8"/></svg>
+      <span>حساب‌ها</span>
+    </button>
+    <button class="tab" data-go="more" type="button">
+      <svg viewBox="0 0 24 24" width="21" height="21"><path fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" d="M4 7h16M4 12h16M4 17h16"/></svg>
+      <span>بیشتر</span>
+    </button>
+  </nav>
+
+  <!-- ═══════════ لایه‌های شناور ═══════════ -->
+  <div id="sheetRoot"></div>
+  <div id="toastRoot" class="toast-root" aria-live="polite"></div>
+
+
+  <!-- ══════════════════════════════════════════════════════════════ -->
+  <!-- صفحات احراز هویت -->
+  <!-- ══════════════════════════════════════════════════════════════ -->
+
+  <div id="authContainer" class="auth-container">
+    
+    <!-- ═══════════ صفحه فعال‌سازی ═══════════ -->
+    <div id="activationPage" class="auth-page" style="display: block;">
+      <div class="auth-card">
+        <div class="auth-logo">
+          <div class="auth-logo-icon">
+            <svg viewBox="0 0 24 24" width="64" height="64" fill="none" stroke="currentColor" stroke-width="1.5">
+              <path d="M12 2L2 7l10 5 10-5-10-5z"/>
+              <path d="M2 17l10 5 10-5"/>
+              <path d="M2 12l10 5 10-5"/>
+            </svg>
+          </div>
+          <h1 class="auth-title">فعال‌سازی برنامه</h1>
+          <p class="auth-subtitle">برای شروع، رمز فعال‌سازی را وارد کنید</p>
+        </div>
+        
+        <div class="auth-form">
+          <div class="input-group">
+            <label class="input-label">رمز فعال‌سازی</label>
+            <div class="input-wrapper">
+              <span class="input-icon-right">
+                <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
+                  <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+                  <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+                </svg>
+              </span>
+              <input 
+                type="password" 
+                id="activationCode" 
+                class="auth-input" 
+                placeholder="رمز فعال‌سازی را وارد کنید"
+                autocomplete="off"
+              >
+              <button type="button" class="input-icon-left" onclick="togglePassword('activationCode', this)">
+                <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                  <circle cx="12" cy="12" r="3"/>
+                </svg>
+              </button>
+            </div>
+            <div class="input-error" id="activationError"></div>
+          </div>
+          
+          <button class="auth-btn" onclick="handleActivation()">
+            فعال‌سازی برنامه
+          </button>
+          
+          <p class="auth-hint">رمز پیش‌فرض: 1234</p>
+        </div>
+      </div>
+    </div>
+    
+    <!-- ═══════════ صفحه ایجاد رمز کاربر ═══════════ -->
+    <div id="createPasswordPage" class="auth-page" style="display:none;">
+      <div class="auth-card">
+        <div class="auth-logo">
+          <div class="auth-logo-icon">
+            <svg viewBox="0 0 24 24" width="64" height="64" fill="none" stroke="currentColor" stroke-width="1.5">
+              <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+              <circle cx="12" cy="7" r="4"/>
+            </svg>
+          </div>
+          <h1 class="auth-title">ایجاد رمز ورود</h1>
+          <p class="auth-subtitle">یک رمز عبور قوی برای حساب خود انتخاب کنید</p>
+        </div>
+        
+        <div class="auth-form">
+          <div class="input-group">
+            <label class="input-label">رمز عبور</label>
+            <div class="input-wrapper">
+              <span class="input-icon-right">
+                <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
+                  <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+                  <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+                </svg>
+              </span>
+              <input 
+                type="password" 
+                id="newPassword" 
+                class="auth-input" 
+                placeholder="رمز عبور خود را وارد کنید"
+                autocomplete="new-password"
+              >
+              <button type="button" class="input-icon-left" onclick="togglePassword('newPassword', this)">
+                <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                  <circle cx="12" cy="12" r="3"/>
+                </svg>
+              </button>
+            </div>
+          </div>
+          
+          <div class="input-group">
+            <label class="input-label">تکرار رمز عبور</label>
+            <div class="input-wrapper">
+              <span class="input-icon-right">
+                <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
+                  <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+                  <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+                </svg>
+              </span>
+              <input 
+                type="password" 
+                id="confirmPassword" 
+                class="auth-input" 
+                placeholder="رمز عبور را دوباره وارد کنید"
+                autocomplete="new-password"
+              >
+              <button type="button" class="input-icon-left" onclick="togglePassword('confirmPassword', this)">
+                <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                  <circle cx="12" cy="12" r="3"/>
+                </svg>
+              </button>
+            </div>
+            <div class="input-error" id="createPasswordError"></div>
+          </div>
+          
+          <button class="auth-btn" onclick="handleCreatePassword()">
+            ثبت رمز
+          </button>
+        </div>
+      </div>
+    </div>
+    
+    <!-- ═══════════ صفحه ورود ═══════════ -->
+    <div id="loginPage" class="auth-page" style="display:none;">
+      <div class="auth-card">
+        <div class="auth-logo">
+          <div class="auth-logo-icon">
+            <svg viewBox="0 0 24 24" width="64" height="64" fill="none" stroke="currentColor" stroke-width="1.5">
+              <path d="M12 2L2 7l10 5 10-5-10-5z"/>
+              <path d="M2 17l10 5 10-5"/>
+              <path d="M2 12l10 5 10-5"/>
+            </svg>
+          </div>
+          <h1 class="auth-title">ورود به سیستم</h1>
+          <p class="auth-subtitle">رمز عبور خود را وارد کنید</p>
+        </div>
+        
+        <div class="auth-form">
+          <div class="input-group">
+            <label class="input-label">رمز عبور</label>
+            <div class="input-wrapper">
+              <span class="input-icon-right">
+                <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
+                  <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+                  <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+                </svg>
+              </span>
+              <input 
+                type="password" 
+                id="loginPassword" 
+                class="auth-input" 
+                placeholder="رمز عبور خود را وارد کنید"
+                autocomplete="current-password"
+              >
+              <button type="button" class="input-icon-left" onclick="togglePassword('loginPassword', this)">
+                <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                  <circle cx="12" cy="12" r="3"/>
+                </svg>
+              </button>
+            </div>
+            <div class="input-error" id="loginError"></div>
+          </div>
+          
+          <button class="auth-btn" onclick="handleLogin()">
+            وارد شدن
+          </button>
+          
+          <div class="auth-footer">
+            <button class="auth-link" onclick="handleFingerprint()">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M2 12C2 6.5 6.5 2 12 2a10 10 0 0 1 8 4"/>
+                <path d="M5 19.5C5.5 18 6 15 6 12c0-.7.12-1.37.34-2"/>
+                <path d="M17.29 21.02c.12-.6.43-2.3.5-3.02"/>
+                <path d="M12 10a2 2 0 0 0-2 2c0 1.02-.1 2.51-.26 4"/>
+                <path d="M8.65 22c.21-.66.45-1.32.57-2"/>
+                <path d="M14 13.12c0 2.38 0 6.38-1 8.88"/>
+                <path d="M2 16h.01"/>
+                <path d="M21.8 16c.2-2 .131-5.354 0-6"/>
+                <path d="M9 6.8a6 6 0 0 1 9 5.2c0 .47 0 1.17-.02 2"/>
+              </svg>
+              استفاده از اثر انگشت
+            </button>
+            <a href="#" class="auth-link" onclick="handleForgotPassword(); return false;">
+              رمز عبور را فراموش کرده‌اید؟
+            </a>
+          </div>
+        </div>
+      </div>
+    </div>
+    
+  </div>
+  <script src="app.js"></script>
+</body>
+</html>
